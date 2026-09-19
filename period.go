@@ -22,11 +22,11 @@ func (p Period) IsZero() bool {
 	return p.From.IsZero() && p.To.IsZero()
 }
 
-// Overlaps reports whether the half-open intervals share any instant.
-func (p Period) Overlaps(q Period) bool {
-	pBeforeQEnd := q.To.IsZero() || p.From.Before(q.To)
-	qBeforePEnd := p.To.IsZero() || q.From.Before(p.To)
-	return pBeforeQEnd && qBeforePEnd
+// overlaps reports whether the half-open intervals share any instant.
+func (p Period) overlaps(q Period) bool {
+	startsBeforeOtherEnd := q.To.IsZero() || p.From.Before(q.To)
+	otherStartsBeforeEnd := p.To.IsZero() || q.From.Before(p.To)
+	return startsBeforeOtherEnd && otherStartsBeforeEnd
 }
 
 func (p Period) utc() Period {

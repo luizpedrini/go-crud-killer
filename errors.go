@@ -9,4 +9,5 @@ var (
 	ErrInvalidPeriod = errors.New("invalid period")
 	ErrMissingActor  = errors.New("missing actor")
 	ErrForeignKey    = errors.New("foreign key")
+	ErrEmptyIdentity = errors.New("empty identity")
 )

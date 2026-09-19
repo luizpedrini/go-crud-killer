@@ -5,35 +5,38 @@ import (
 	"fmt"
 )
 
-// Store is the inbound port: callers Create (and later Read, Edit, Terminate,
-// History, List) through this type. Tests exercise behavior here, not through
-// adapter internals.
-type Store[T any] struct {
-	clock    Clock
-	rec      Recording[T]
-	validate func(T) error
+// Store is the inbound port. Callers and tests Create through this interface,
+// not through adapter internals.
+type Store[T any] interface {
+	Create(ctx context.Context, identity string, payload T, actor Actor, valid Period) (Version[T], error)
+}
+
+type store[T any] struct {
+	clock     Clock
+	recording Recording[T]
+	validate  func(T) error
 }
 
 // Option configures a Store at construction.
-type Option[T any] func(*Store[T])
+type Option[T any] func(*store[T])
 
 // WithValidate registers optional Payload validation. Envelope validation
 // stays the library's.
 func WithValidate[T any](fn func(T) error) Option[T] {
-	return func(s *Store[T]) {
+	return func(s *store[T]) {
 		s.validate = fn
 	}
 }
 
 // New constructs a Store over an injected Clock and Recording adapter.
-func New[T any](clock Clock, rec Recording[T], opts ...Option[T]) (*Store[T], error) {
+func New[T any](clock Clock, recording Recording[T], opts ...Option[T]) (Store[T], error) {
 	if clock == nil {
 		return nil, fmt.Errorf("clock is required")
 	}
-	if rec == nil {
+	if recording == nil {
 		return nil, fmt.Errorf("recording is required")
 	}
-	s := &Store[T]{clock: clock, rec: rec}
+	s := &store[T]{clock: clock, recording: recording}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(s)
@@ -45,13 +48,13 @@ func New[T any](clock Clock, rec Recording[T], opts ...Option[T]) (*Store[T], er
 // Create records a Version for a caller-minted Identity. valid is the
 // Valid-time period; a zero Period means [clock.Now(), unbounded).
 // Transaction time is taken from the Clock and is not a caller argument.
-func (s *Store[T]) Create(ctx context.Context, identity string, payload T, actor Actor, valid Period) (Version[T], error) {
+func (s *store[T]) Create(ctx context.Context, identity string, payload T, actor Actor, valid Period) (Version[T], error) {
 	var zero Version[T]
 	if identity == "" {
-		return zero, fmt.Errorf("create: identity must be non-empty")
+		return zero, fmt.Errorf("create: %w", ErrEmptyIdentity)
 	}
-	if actor.ID == "" {
-		return zero, fmt.Errorf("create %q: %w", identity, ErrMissingActor)
+	if actor.missingID() {
+		return zero, createErr(identity, ErrMissingActor)
 	}
 
 	now := s.clock.Now().UTC()
@@ -65,26 +68,23 @@ func (s *Store[T]) Create(ctx context.Context, identity string, payload T, actor
 	}
 	if s.validate != nil {
 		if err := s.validate(payload); err != nil {
-			return zero, fmt.Errorf("create %q: %w", identity, err)
+			return zero, createErr(identity, err)
 		}
 	}
 
-	uow, err := s.rec.Begin(ctx)
+	uow, err := s.recording.Begin(ctx)
 	if err != nil {
-		return zero, fmt.Errorf("create %q: %w", identity, err)
+		return zero, createErr(identity, err)
 	}
 	defer func() { _ = uow.Rollback(ctx) }()
 
 	existing, err := uow.Versions(ctx, identity)
 	if err != nil {
-		return zero, fmt.Errorf("create %q: %w", identity, err)
+		return zero, createErr(identity, err)
 	}
 	for _, v := range existing {
-		if !v.TransactionTime.Unbounded() {
-			continue
-		}
-		if v.ValidTime.Overlaps(valid) {
-			return zero, fmt.Errorf("create %q: %w", identity, ErrAlreadyExists)
+		if v.currentBeliefOverlaps(valid) {
+			return zero, createErr(identity, ErrAlreadyExists)
 		}
 	}
 
@@ -96,10 +96,14 @@ func (s *Store[T]) Create(ctx context.Context, identity string, payload T, actor
 		TransactionTime: Period{From: now},
 	}
 	if err := uow.Insert(ctx, ver); err != nil {
-		return zero, fmt.Errorf("create %q: %w", identity, err)
+		return zero, createErr(identity, err)
 	}
 	if err := uow.Commit(ctx); err != nil {
-		return zero, fmt.Errorf("create %q: %w", identity, err)
+		return zero, createErr(identity, err)
 	}
 	return ver, nil
+}
+
+func createErr(identity string, err error) error {
+	return fmt.Errorf("create %q: %w", identity, err)
 }

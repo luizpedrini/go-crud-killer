@@ -7,6 +7,10 @@ type Actor struct {
 	Reason string
 }
 
+func (a Actor) missingID() bool {
+	return a.ID == ""
+}
+
 // Version is one recording of a Payload over a Valid-time period, believed
 // during a Transaction-time period.
 type Version[T any] struct {
@@ -15,4 +19,12 @@ type Version[T any] struct {
 	Actor           Actor
 	ValidTime       Period
 	TransactionTime Period
+}
+
+func (v Version[T]) currentlyBelieved() bool {
+	return v.TransactionTime.Unbounded()
+}
+
+func (v Version[T]) currentBeliefOverlaps(valid Period) bool {
+	return v.currentlyBelieved() && v.ValidTime.overlaps(valid)
 }

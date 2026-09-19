@@ -38,17 +38,18 @@ func (u *uow[T]) Versions(ctx context.Context, identity string) ([]crudkiller.Ve
 		return nil, err
 	}
 	var out []crudkiller.Version[T]
-	for _, v := range u.adapter.records {
-		if v.Identity == identity {
-			out = append(out, v)
-		}
-	}
-	for _, v := range u.pending {
-		if v.Identity == identity {
-			out = append(out, v)
-		}
-	}
+	out = appendIdentity(out, u.adapter.records, identity)
+	out = appendIdentity(out, u.pending, identity)
 	return out, nil
+}
+
+func appendIdentity[T any](dst, src []crudkiller.Version[T], identity string) []crudkiller.Version[T] {
+	for _, v := range src {
+		if v.Identity == identity {
+			dst = append(dst, v)
+		}
+	}
+	return dst
 }
 
 func (u *uow[T]) Insert(ctx context.Context, v crudkiller.Version[T]) error {
