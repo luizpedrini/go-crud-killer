@@ -1,6 +1,6 @@
 # This is a Go library for entity CRUD
 
-The repo is `github.com/luizpedrini/go-crud-killer`. Callers define simple entities and perform Create, Read, Edit, and Terminate in-process through a Go module, not through a hosted service or a CLI as the primary product.
+The module is `github.com/luizpedrini/go-crud-killer` (Go 1.23+). Callers define entities and perform Create, Read, Edit, and Terminate in-process. v1 is library-only: no CLI and no HTTP tool. A tool can sit on the library later without becoming the product.
 
 ## Status
 
@@ -8,5 +8,5 @@ accepted
 
 ## Considered Options
 
-- **Go library (chosen).** Matches the product brief. The GitHub repo description currently says "an opiniated tool"; that description should follow the library decision, not the other way around.
-- **CLI / HTTP tool as the product.** Useful later as an adapter on top of the library. Making the tool the core would hide the entity-definition and CRUD interface that callers need to embed.
+- **Go library only in v1 (chosen).** Matches the product brief. The GitHub description still says "an opiniated tool"; that description should follow this decision.
+- **CLI / HTTP tool as the product, or shipped alongside in v1.** Useful later as an adapter. Shipping it now would split the interface: we would design a process tool instead of a deep in-process module.

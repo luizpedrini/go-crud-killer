@@ -2,191 +2,203 @@
 
 `/grill-with-docs` = `/grilling` + `/domain-modeling`. This file is the interview paper trail. Glossary terms that are settled live in [`CONTEXT.md`](../../CONTEXT.md). Hard-to-reverse settled decisions live in [`docs/adr/`](../adr/).
 
-This run was AFK: the product brief is treated as Round 0 answers. Round 1 is the current **frontier** (questions that can be asked without guessing). Recommended answers are recorded; they are **not** accepted until confirmed. Round 2 is shown only as the contingent next frontier.
-
-The grilling session is **not finished**. The frontier is not empty. Do not implement the library until a later round closes it and you confirm shared understanding.
+Luiz locked Round 1 on 2026-09-19. Round 2 is the current **frontier**. Recommended answers below are **not** accepted until confirmed. Do not implement the library until the frontier is empty and you confirm shared understanding.
 
 ## Design tree
 
 ```
 go-crud-killer
-├── Product shape                          ← settled: Go library (ADR-0001)
-│   ├── CLI / HTTP adapter later?          ← Round 1 Q1
-│   └── Module path / Go version           ← Round 1 Q2
+├── Product shape                          ✓ library-only v1 (ADR-0001)
+│   ├── CLI / HTTP in v1                   ✓ no
+│   └── Module path / Go version           ✓ github.com/luizpedrini/go-crud-killer, Go 1.23
 ├── Domain model
-│   ├── Bitemporal envelope on every Entity← settled (ADR-0002)
-│   ├── Valid time vs Transaction time     ← settled (CONTEXT.md)
-│   ├── Create / Read / Edit / Terminate   ← settled names; semantics Round 1 Q3–Q5
-│   ├── Audit attribution                  ← Round 1 Q6
-│   ├── Identity                           ← Round 1 Q7
-│   └── Relations / "simple"               ← Round 1 Q8
-├── Caller interface (the deep module)
-│   ├── How entities are defined           ← Round 1 Q9
-│   └── Operation surface                  ← blocked on Q3–Q9 → Round 2
+│   ├── Bitemporal envelope                ✓ ADR-0002
+│   ├── Terminate                          ✓ valid-time end, keep history (ADR-0003)
+│   ├── Edit                               ✓ retroactive, append-only (ADR-0004)
+│   ├── Default Valid time                 ✓ [now, unbounded)
+│   ├── Actor                              ✓ required on mutations (ADR-0005)
+│   ├── Identity                           ✓ caller string (ADR-0006)
+│   └── Foreign key                        ✓ validate on mutation (ADR-0007); semantics → Round 2
+├── Caller interface
+│   ├── Entity definition                  ✓ Store[T], no codegen (ADR-0008)
+│   ├── Operation surface                  ← Round 2
+│   ├── Clock                              ← Round 2
+│   ├── Concurrency                        ← Round 2
+│   ├── Errors                             ← Round 2
+│   └── Foreign key mechanics              ← Round 2
 └── Persistence
-    ├── Where the bitemporal rules live    ← Round 1 Q10
-    └── First production adapter           ← blocked on Q10 → Round 2
+    ├── Who owns the rules                 ✓ Go module, DB-agnostic adapters (ADR-0009)
+    └── Which adapters ship                ← Round 2 (Postgres is not locked)
 ```
 
-## Round 0 — settled from the brief
-
-Taken as user answers, not recommendations:
+## Round 0 — locked (product brief)
 
 1. **Name**: go-crud-killer.
-2. **Kind**: new Golang **library** (the GitHub description still says "opiniated tool"; ADR-0001 follows the brief).
-3. **Job**: CRUD for simple entities, built to scale, covering **entity definition** and **CRUD operations**.
-4. **Minimal Entity**: full **traceability**, **audit**, and **double temporal validity**:
-   - when the entity is **valid** (Valid time);
-   - when it was **created / terminated / edited** (Transaction time).
+2. **Kind**: Golang **library**.
+3. **Job**: CRUD for simple entities, covering entity definition and CRUD operations.
+4. **Minimal Entity**: Traceability, Audit, and double temporal validity (Valid time + Transaction time).
 
-Terms written to `CONTEXT.md` from this round: Entity, Create, Read, Edit, Terminate, Audit, Traceability, Valid time, Transaction time, Bitemporal.
+## Round 1 — locked 2026-09-19 (Luiz)
 
-ADRs written: [0001](../adr/0001-go-library-for-entity-crud.md), [0002](../adr/0002-bitemporal-audit-on-every-entity.md).
+Each item is the locked decision. The original ➡️ was the recommendation; **Q8 and the Postgres part of Q10 diverged**.
 
-Facts gathered (not user decisions): [bitemporal-and-go-landscape.md](../research/bitemporal-and-go-landscape.md).
+| Q | Locked |
+| --- | --- |
+| **Q1** | Library-only v1. No CLI, no HTTP tool. [ADR-0001](../adr/0001-go-library-for-entity-crud.md) |
+| **Q2** | Module `github.com/luizpedrini/go-crud-killer`, minimum Go 1.23. [ADR-0001](../adr/0001-go-library-for-entity-crud.md) |
+| **Q3** | Terminate = end Valid time, keep history. No physical delete. [ADR-0003](../adr/0003-terminate-keeps-history.md) |
+| **Q4** | Edit may be retroactive: split Valid time, never rewrite Transaction time. [ADR-0004](../adr/0004-retroactive-edit-is-append-only.md) |
+| **Q5** | Default Valid time when omitted: `[now, unbounded)`. |
+| **Q6** | Actor required on every mutation. [ADR-0005](../adr/0005-actor-required-on-mutations.md) |
+| **Q7** | Identity minted by the caller as a `string`. [ADR-0006](../adr/0006-caller-supplied-string-identity.md) |
+| **Q8** | **Foreign key validation** in v1 (not “no relations”). [ADR-0007](../adr/0007-foreign-key-validation.md). How existence is judged is Round 2. |
+| **Q9** | Generics over structs. No codegen. [ADR-0008](../adr/0008-generics-over-structs.md) |
+| **Q10** | Bitemporal rules owned by the Go module. **Database-agnostic adapters**, not DB-owned rules. [ADR-0009](../adr/0009-module-owns-bitemporal-rules.md). Postgres-as-first-SQL-adapter was *not* locked. |
 
-## Round 1 — current frontier
+Terms added to `CONTEXT.md` this round: Identity, Payload, Version, Actor, Foreign key; Edit/Terminate/Valid time sharpened.
 
-Numbered questions. One recommended answer each. Confirm, reject, or replace; then Round 2 can be asked for real.
+## Round 2 — current frontier
 
----
-
-❓ **Q1** - **Library-only, or library plus a tool in v1?**
-The GitHub description calls this an "opiniated tool". The brief calls it a library. A CLI or HTTP admin tool can sit on the library later. Shipping both in v1 splits the interface: you design a process tool instead of a deep in-process module.
-
-➡️ **Library only in v1.** A command or HTTP adapter is a later extra, not the product. Update the GitHub description to match.
-
----
-
-❓ **Q2** - **Go version and module path?**
-Remote is `github.com/luizpedrini/go-crud-killer`. Current stable Go that still gets modules right for generics + `iter`/`slog` is 1.22+; 1.23/1.24 is the practical floor if we want range-over-func iterators for History.
-
-➡️ **Module `github.com/luizpedrini/go-crud-killer`, minimum Go 1.23.** No vanity import for v1.
+Prerequisites are settled. Ask all of these now. Questions that hang off these answers (referential action on Terminate, History pagination, SQL schema) wait for Round 3.
 
 ---
-
-❓ **Q3** - **What does Terminate do?**
-CRUD's "Delete" usually means `DELETE FROM`. You used **terminated** on the transaction axis. Options:
-
-- **A.** Close Valid time from a caller-supplied instant (the Entity is no longer true in the world). Transaction time records that we learned the termination now. Recordings remain.
-- **B.** Close Transaction time only ("we no longer currently believe this Entity exists") without a valid-time end.
-- **C.** Physical delete of current and/or historical recordings.
-
-➡️ **A.** Terminate is a valid-time end plus a new transaction-time recording. Physical delete is out of scope for the core library (retention/purge would be a later, explicit operation if ever).
-
----
-
-❓ **Q4** - **May Edit change Valid time, including the past?**
-If Edit can only change "current" facts, you cannot record "we learned today that the salary in March was wrong." That is the question bitemporal Audit exists to answer. If Edit cannot be retroactive, Valid time is decoration.
-
-➡️ **Yes. Edit may supply a Valid-time period that overlaps the past.** Overlap is resolved by splitting/closing valid-time portions on the *new* transaction-time recording, never by rewriting the old transaction-time recording. That overlap-split behavior is the first thing a prototype should prove if Q4 is accepted.
-
----
-
-❓ **Q5** - **Default Valid time when the caller omits it?**
-Callers of "simple CRUD" will not always think in periods.
-
-- **A.** Required: every Create/Edit/Terminate takes an explicit Valid-time period.
-- **B.** Default `[now, unbounded)` on Create/Edit, and Terminate defaults to `[now, unbounded)` as the portion that ends.
-- **C.** Valid time is always unbounded ("forever") and only Transaction time is used unless the caller opts in. This contradicts ADR-0002's "every entity is bitemporal" in spirit: the axis exists but is unused.
-
-➡️ **B.** Defaults keep simple CRUD one-line. The envelope is still always stored. Callers who care about the past pass an explicit period.
-
----
-
-❓ **Q6** - **Is Audit's actor required on every mutation?**
-A nullable `updated_by` is how audit trails go missing. Chronicle (a nearby Go bitemporal log) requires an actor and refuses an ambient "system" default.
-
-➡️ **Required Actor on Create, Edit, and Terminate.** Type is a small struct (`ID` required; `Type`/`Name`/`Reason` optional). Reads do not take an Actor. No hidden default actor in the library.
-
----
-
-❓ **Q7** - **Who mints Identity?**
-If the library generates ULIDs, callers who already have domain IDs fight it. If the library requires caller IDs, "simple" Create needs an ID source.
-
-➡️ **Caller supplies Identity.** The library treats it as an opaque comparable (start with `string`). No ID generator in v1.
-
----
-
-❓ **Q8** - **How simple is "simple entity"? Relations?**
-Temporal foreign keys (the referenced Entity must exist *for the whole valid-time period*) are a full second product. v1 can still "scale" as many independent Entities of one kind.
-
-➡️ **v1 is one Entity kind at a time: Identity + Payload + envelope. No relations, no temporal foreign keys, no aggregates.** Nested payload fields are just payload. Cross-entity consistency is the caller's problem until a later ADR.
-
----
-
-❓ **Q9** - **How do callers define an Entity?**
-Options:
-
-- **A.** Typed Go struct + a small envelope the library owns. `Store[T]` via generics. No codegen.
-- **B.** Codegen (ent-style schema → methods). Heavier, more complete later.
-- **C.** Untyped `map` / `[]byte` payloads (chronicle-style). Fast to persist, weak as an *entity definition* library.
-
-➡️ **A.** Generics over a caller struct. The library owns Identity + Valid time + Transaction time + Audit; the caller owns the payload struct. Codegen is a later option if struct tags or schema files become necessary. Untyped payloads are an internal codec concern, not the public entity-definition story.
-
----
-
-❓ **Q10** - **Where do the bitemporal rules live?**
-If Postgres application-time / system-versioning (or a trigger extension) owns the rules, the Go module is a thin SQL wrapper and other stores cannot share behavior. If the Go module owns the rules, every store must not cheat (no `UPDATE` of closed transaction-time rows).
-
-➡️ **The Go module owns the rules** (a deep in-process module). Persistence is a **seam** with at least two **adapters** from day one: in-memory (the test stand-in) and one SQL adapter. Adapters store and retrieve recordings; they do not invent their own overlap semantics. Postgres is the recommended first SQL adapter (ranges, exclusion constraints) but is not the interface.
-
----
-
-## Round 2 — contingent (do not answer yet)
-
-Ask these only after Round 1 is confirmed. Recommendations below assume every Round 1 ➡️ is accepted; they change if you reject any.
 
 ❓ **Q11** - **Public operation surface?**
-➡️ Four mutations (`Create`, `Read`, `Edit`, `Terminate`) plus `History` (all transaction-time recordings) and `AsOf` coordinates on Read (valid-at × transaction-at). No `Upsert`, no `Patch`, no bulk API in v1. List/filter of many Identities is a later deepening.
+The locked verbs are Create, Read, Edit, Terminate. Traceability also needs a way to see superseded Versions and to pin both clocks.
+
+- **A.** `Create`, `Read(id, AsOf)`, `Edit`, `Terminate`, plus `History(id)` (every Version, including superseded).
+- **B.** A plus `List(AsOf)` of Identities currently believed valid at that as-of (CRUD without List is an incomplete simple store).
+- **C.** A plus bulk Create/Edit and `Upsert` / `Patch`.
+
+➡️ **B.** Five single-Identity operations plus `List`. No `Upsert`, `Patch`, or bulk in v1. `AsOf` is a pair `(ValidAt, TransactionAt)`; zero means the clock's now. `History` is per Identity, not a global log. Pagination of `List`/`History` waits until this lands.
+
+---
 
 ❓ **Q12** - **Clock and time zone?**
-➡️ Injected `Clock` with `Now() time.Time`. All timestamps UTC. Transaction time comes from the clock (or the database transaction timestamp if the SQL adapter can do it atomically); callers cannot set it.
+Default Valid time is `[now, unbounded)`. Transaction time is system-assigned (ADR-0002, ADR-0009). Tests cannot freeze `time.Now`. SQL adapters sometimes prefer the datastore transaction timestamp so every row in one commit shares one Transaction-time start.
+
+- **A.** Injected `Clock` (`Now() time.Time`), all timestamps UTC, callers cannot set Transaction time. An adapter may source `Now` from its transaction as long as the *module* still assigns the period.
+- **B.** Always `time.Now().UTC()` inside the module. Simpler; tests get flaky or need to sleep.
+- **C.** Callers pass Transaction time. Destroys Audit (they can backdate belief).
+
+➡️ **A.** Injected `Clock`, UTC, Transaction time not on the public mutation arguments. Adapter-provided transaction time is an adapter detail, not a second clock callers see.
+
+---
 
 ❓ **Q13** - **Concurrency?**
-➡️ Optimistic: Edit/Terminate fail if the current transaction-time recording has already been closed. No pessimistic locks in the in-memory adapter; SQL adapter may use a unique "open transaction-time" constraint.
+Two Edits of the same Identity can race: both read an open Transaction-time Version, both try to close it. Foreign key checks can race with Terminate of the referenced Entity.
 
-❓ **Q14** - **Payload validation?**
-➡️ Library checks envelope invariants (periods well-formed, actor present, identity non-empty, no overlapping *current* valid-time portions for one Identity). Payload validation is the caller's (or an optional injected `Validate(T) error`).
+- **A.** Optimistic: mutation fails if the open Transaction-time Version it based itself on is already closed (`ErrConflict`). No pessimistic locks in the memory adapter. Durable adapters may enforce “at most one open Transaction-time row per Identity” as a constraint, still reporting `ErrConflict`.
+- **B.** Pessimistic lock per Identity on every mutation.
+- **C.** Last write wins: close whatever is open and append. Silently drops a concurrent Actor's belief.
 
-❓ **Q15** - **SQL dialect for the first adapter?**
-➡️ PostgreSQL `timestamptz` + `tstzrange` `[)` with `NULL` as unbounded, matching the in-memory zero/`ok` convention. No GORM/ent dependency.
+➡️ **A.** Optimistic `ErrConflict`. Last-write-wins would hide a lost Edit. Pessimistic locks are an adapter optimization later, not the interface.
 
-❓ **Q16** - **Corrections vs "new facts"?**
-➡️ One Edit path. An optional `Reason` on Audit is enough to distinguish "correction" from "raise" without a second verb. If you later need intent as a first-class enum, that is a new ADR.
+---
 
-❓ **Q17** - **Multi-tenancy?**
-➡️ None in v1. Tenant is either part of Identity or a payload field the library does not interpret.
+❓ **Q14** - **Which adapters ship in v1? Postgres?**
+Rules are database-agnostic (ADR-0009). Two adapters make the persistence seam real. Postgres has ranges and exclusion constraints; it must still not own the rules.
 
-❓ **Q18** - **Error model?**
-➡️ Sentinel errors: `ErrNotFound`, `ErrAlreadyExists`, `ErrConflict`, `ErrInvalidPeriod`, `ErrMissingActor`. Wrap with `%w`. No panics on the public interface.
+- **A.** In-memory adapter (conformance suite) + a dialect-free `RecordingStore` port + a Postgres adapter as the first durable implementation (`timestamptz`, `NULL` = unbounded). No GORM/ent. Other SQL dialects are later adapters behind the same port.
+- **B.** In-memory only in v1. Durable adapters after the interface is proven.
+- **C.** Postgres-only, no memory adapter. Breaks the seam and the test story.
 
-## Proposed glossary additions (not in CONTEXT.md yet)
+➡️ **A.** Memory + Postgres, same port. Postgres is the first *durable adapter*, not a second rule engine. If this is too much for v1, take **B** — do not take **C**.
 
-Add these only after the matching Round 1 answers land:
+---
 
-| Term | If Q | Draft definition |
-| --- | --- | --- |
-| **Identity** | Q7 | Caller-supplied stable key for one Entity across Versions. _Avoid_: primary key, UUID |
-| **Payload** | Q9 | Caller-defined attributes, excluding Identity and the envelope. _Avoid_: data, body |
-| **Version** | Q3–Q5 | One recording of Payload over a Valid-time period, believed during a Transaction-time period. _Avoid_: revision, snapshot |
-| **Actor** | Q6 | Who caused a Version to be recorded. _Avoid_: user, system (as a default) |
-| **As of** | Q11 | A pair of instants (valid-at, transaction-at) that select which Version Read returns. |
+❓ **Q15** - **Error model?**
+Callers need to distinguish “not there”, “already there”, “someone else just edited”, “bad period”, “no Actor”, and “Foreign key failed” without string-matching.
 
-## Proposed ADRs (not written until confirmed)
+➡️ **Sentinel errors**, wrapped with `%w`: `ErrNotFound`, `ErrAlreadyExists`, `ErrConflict`, `ErrInvalidPeriod`, `ErrMissingActor`, `ErrForeignKey`. No panics on the public interface. `ErrForeignKey` names the field and the missing Identity; it does not invent a second error type per kind.
 
-- Library-only v1, no CLI/HTTP product (Q1).
-- Caller-supplied string Identity (Q7).
-- Required Actor on mutations (Q6).
-- Go module owns bitemporal rules; memory + SQL adapters (Q10).
-- Retroactive Edit splits valid time; never rewrites transaction time (Q4).
-- v1 has no relations (Q8).
+---
+
+❓ **Q16** - **When does a Foreign key count as valid?**
+Locked: the library validates Foreign keys on mutation. Not locked: *existence on which axis*.
+
+Scenario: Create Employee Alice, Valid `[2020-01-01, unbounded)`, Foreign key `DepartmentID = "ops"`.
+
+- Department `ops` currently believed valid only `[2018-01-01, 2019-01-01)` → should Create fail?
+- Department `ops` valid `[2018-01-01, unbounded)` as of today, but a Read as of 2019-06-01 at Transaction time 2019-06-01 showed no `ops` (it was Created later, backdated)? That is, current belief about 2020 vs belief-at-the-time?
+
+SQL:2011 temporal foreign keys require the referenced key to exist **throughout the referencing row's application-time period**, in the current system-time state.
+
+- **A.** **Covering, current belief.** For the child's Valid-time period (after defaulting), every instant must be covered by a currently believed Version of the referenced Identity. Retroactive Create/Edit uses *today's* belief about that past, not the belief that existed then. Matches SQL:2011 application-time FK.
+- **B.** **Instant, current belief.** Only the start instant (or `ValidAt = now`) of the child must resolve. Cheaper; allows Alice `[2020, ∞)` to point at a department that ended in 2021.
+- **C.** **Snapshot.** The referenced Identity has any open Version right now, ignoring Valid time. Fights ADR-0002: a bitemporal child with a snapshot parent.
+
+➡️ **A.** Covering on current belief. Otherwise “simple” Foreign keys lie about Valid time. Belief-at-the-time checks are a later Read concern, not a mutation guard.
+
+---
+
+❓ **Q17** - **How is a Foreign key declared on `T`?**
+No codegen (ADR-0008). The module must know which Payload fields are Identities of which Entity **kind**.
+
+- **A.** A function the caller passes when constructing `Store[T]`: `func(T) []Ref` where `Ref` is `{Kind, Field, ID string}`. Explicit, testable, no reflection required on the happy path.
+- **B.** Struct tags (`crud:"fk,kind=department"`). Looks like an ORM, needs reflection, fails late.
+- **C.** Same-kind only, field named `ParentID`. Too small given Q8.
+
+➡️ **A.** Caller-supplied `Refs(T) []Ref` (or an interface `T` may optionally implement). Tags are a later convenience, not v1.
+
+---
+
+❓ **Q18** - **Same-kind only, or cross-kind Foreign keys?**
+`Store[T]` sees one payload type. Employee → Manager is same kind. Employee → Department is two stores.
+
+- **A.** Cross-kind via an injected **Resolver** port: `Covers(ctx, kind, id, valid Period) error`, implemented by a registry of stores (or a test fake). Same-kind FKs use the same Store through that port too, so there is one check.
+- **B.** Same-kind only in v1. Cross-kind is the caller's problem. Shrinks Q8 a lot.
+- **C.** One mega-store of untyped payloads. Contradicts ADR-0008.
+
+➡️ **A.** Resolver port. Without it, Foreign key validation cannot see Department from `Store[Employee]`. The port is justified by two adapters: the real registry and an in-memory fake for tests.
+
+---
+
+❓ **Q19** - **Payload validation beyond the envelope?**
+Envelope invariants are the library's (non-empty Identity, Actor, well-formed periods, no overlapping *currently believed* Valid-time portions, Foreign keys per Q16). `T` may have its own rules (email format, money ≥ 0).
+
+➡️ **Optional `Validate(T) error` injected at Store construction.** Nil means payload is opaque. The library does not tag-parse `T`.
+
+---
+
+❓ **Q20** - **Correction vs “new fact”?**
+Retroactive Edit (ADR-0004) covers both “Alice's March salary was wrong” and “Alice's salary rose in June”.
+
+➡️ **One Edit path.** Optional `Reason` on Actor is enough in v1. A first-class intent enum is a later ADR if Audit queries need it.
+
+---
+
+❓ **Q21** - **Multi-tenancy?**
+Nothing in Round 1 named tenants.
+
+➡️ **None in v1.** A tenant is either part of Identity (`"acme:alice"`) or a Payload field the library does not interpret. No hidden `WHERE tenant_id` in adapters.
+
+---
+
+❓ **Q22** - **Create again after Terminate?**
+Scenario: Terminate Alice with Valid end 2021-01-01. In 2022 someone Creates Identity `"alice"` again with Valid `[2022-01-01, unbounded)`.
+
+- **A.** Allowed: a new Valid-time life for the same Identity. History contains both lives. Create fails only if a currently believed Version still covers overlapping Valid time (`ErrAlreadyExists`).
+- **B.** Forbidden forever: Identity is one life. Rehire needs a new Identity.
+- **C.** Create after Terminate is an Edit. Hides the verb the Actor chose.
+
+➡️ **A.** Same Identity, non-overlapping current Valid-time lives. Forbidding it forever makes Terminate a dead end for domain IDs that naturally return (employees, accounts).
+
+## Round 3 — blocked (do not answer yet)
+
+These wait on Round 2:
+
+- Referential action when Terminate (or retroactive Edit) of a referenced Entity would leave children uncovered: restrict vs cascade-Terminate vs allow dangling (needs Q16, Q18).
+- `List`/`History` pagination and order (needs Q11).
+- Postgres column types / `tstzrange` vs portable columns (needs Q14 = A).
+- Whether convenience wrappers omit `Period` in the Go signatures or only default internally (Q5 is locked; signature shape follows Q11–Q12).
 
 ## Status
 
 | Item | State |
 | --- | --- |
-| Round 0 | Settled |
-| Round 1 Q1–Q10 | **Waiting on you** |
-| Round 2 Q11–Q18 | Blocked |
-| Implementation | Not started; grilling says do not act until shared understanding |
+| Round 0 | Locked |
+| Round 1 Q1–Q10 | **Locked** (Luiz, 2026-09-19) |
+| Round 2 Q11–Q22 | **Waiting on you** |
+| Round 3 | Blocked |
+| Implementation | Not started |
